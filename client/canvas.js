@@ -49,6 +49,21 @@ const TOOLS = {
   },
 };
 
+// The live canvas sits ON TOP of the committed one, so making a spot
+// transparent there just reveals the still-unerased committed canvas
+// underneath — destination-out only works once applied to the real
+// committed bitmap at commit time. For the live preview, fake an erase by
+// painting opaque white instead, which matches #canvas-container's actual
+// background exactly.
+function eraserPreviewStyle(ctx, style) {
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = "#ffffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.lineWidth = style.size;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+}
+
 const BAKE_THRESHOLD = 200;
 
 // Owns two canvas layers: `committed` (all finalized strokes, repainted only
@@ -141,9 +156,12 @@ export class CanvasRenderer {
     }
     const ctx = stroke.bakeCtx;
     const tail = stroke.points.slice(Math.max(0, stroke.bakedUpTo - 1));
-    const tool = TOOLS[stroke.tool];
-    tool.applyStyle(ctx, stroke);
-    tool.draw(ctx, tail);
+    if (stroke.tool === "eraser") {
+      eraserPreviewStyle(ctx, stroke);
+    } else {
+      TOOLS[stroke.tool].applyStyle(ctx, stroke);
+    }
+    strokePath(ctx, tail);
     stroke.bakedUpTo = stroke.points.length;
   }
 
@@ -179,13 +197,16 @@ export class CanvasRenderer {
   renderLiveFrame() {
     this.liveCtx.clearRect(0, 0, this.widthCss, this.heightCss);
     for (const stroke of this.liveStrokes.values()) {
-      const tool = TOOLS[stroke.tool];
       if (stroke.bakeCanvas) {
         this.liveCtx.drawImage(stroke.bakeCanvas, 0, 0, this.widthCss, this.heightCss);
       }
       const tail = stroke.points.slice(Math.max(0, stroke.bakedUpTo - 1));
-      tool.applyStyle(this.liveCtx, stroke);
-      tool.draw(this.liveCtx, tail);
+      if (stroke.tool === "eraser") {
+        eraserPreviewStyle(this.liveCtx, stroke);
+      } else {
+        TOOLS[stroke.tool].applyStyle(this.liveCtx, stroke);
+      }
+      strokePath(this.liveCtx, tail);
     }
   }
 }
