@@ -45,6 +45,10 @@ box + Join button in the toolbar. Only users in the same room see each
 other's drawing; rooms are fully isolated. Leave it blank / use `main` for
 the default shared room.
 
+**To set your name**: use the "Name" box in the toolbar (or `?name=` in the
+URL) and hit Join. It's remembered in `localStorage` so you don't have to
+re-enter it next time; leave it blank for a random `Guest-XXXX` name.
+
 **To test global undo**: draw a stroke in window A, then click Undo in
 window B. It removes window A's stroke — undo/redo is global across every
 user in the room, not per-user (see ARCHITECTURE.md for why).
@@ -55,6 +59,7 @@ cancels the stroke you're currently mid-draw on.
 ## Features
 
 - Brush + eraser tools, adjustable color and stroke size
+- Choose your own display name (or get a random `Guest-XXXX`)
 - Real-time sync of in-progress strokes (not just finished ones)
 - Live cursor position + name/color for every connected user
 - Global undo/redo shared across all users in a room
