@@ -1,29 +1,9 @@
-/** @typedef {import('../shared/protocol.js').Point} Point */
-/** @typedef {import('../shared/protocol.js').StrokeStyle} StrokeStyle */
-/** @typedef {import('../shared/protocol.js').StrokeOp} StrokeOp */
-/** @typedef {import('../shared/protocol.js').ToolName} ToolName */
-
-/**
- * One entry per drawable tool. Adding a new tool (e.g. "rectangle") is just
- * registering a new entry here — nothing else in the renderer changes.
- * @typedef {Object} Tool
- * @property {(ctx: CanvasRenderingContext2D, style: StrokeStyle) => void} applyStyle
- * @property {(ctx: CanvasRenderingContext2D, points: Point[]) => void} draw - points already in canvas coordinates
- */
-
-/** @param {Point} a @param {Point} b @returns {Point} */
 function midpoint(a, b) {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, t: b.t };
 }
 
-/**
- * Hand-rolled smoothing: draws a quadratic curve through the midpoints of
- * consecutive sampled points, using each real point as the curve's control
- * point. This is what keeps freehand strokes smooth despite sparse,
- * network-relayed input rather than every raw mouse sample.
- * @param {CanvasRenderingContext2D} ctx
- * @param {Point[]} points
- */
+// Smooths a raw point list by drawing quadratic curves through the
+// midpoints of consecutive points, using each point as the control point.
 function strokePath(ctx, points) {
   if (points.length === 0) return;
   if (points.length === 1) {
@@ -44,7 +24,7 @@ function strokePath(ctx, points) {
   ctx.stroke();
 }
 
-/** @type {Record<ToolName, Tool>} */
+// Tool registry: adding a new tool (e.g. rectangle) is one more entry here.
 const TOOLS = {
   brush: {
     applyStyle(ctx, style) {
@@ -63,10 +43,7 @@ const TOOLS = {
       ctx.lineWidth = style.size;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      // Only alpha matters for destination-out, but set explicitly so a
-      // single-point "dot erase" (drawn via fillStyle) never relies on
-      // whatever color happened to be set previously.
-      ctx.fillStyle = "#000000";
+      ctx.fillStyle = "#000000"; // only alpha matters for destination-out
     },
     draw: strokePath,
   },
@@ -74,30 +51,10 @@ const TOOLS = {
 
 const BAKE_THRESHOLD = 200;
 
-/**
- * @typedef {StrokeStyle & {
- *   points: Point[],
- *   bakedUpTo: number,
- *   bakeCanvas: HTMLCanvasElement | null,
- *   bakeCtx: CanvasRenderingContext2D | null
- * }} LiveStroke
- */
-
-/**
- * Owns both canvas layers:
- *  - `committed`: the full history of non-undone strokes, painter's-algorithm
- *    order by server seq. Only fully repainted when the op log itself
- *    changes (join/undo/redo/resize) — never on a per-frame basis.
- *  - `live`: in-progress strokes only (own + everyone else's), redrawn on a
- *    requestAnimationFrame loop that runs only while at least one stroke is
- *    active, so idle CPU usage is zero.
- */
+// Owns two canvas layers: `committed` (all finalized strokes, repainted only
+// when the op log changes) and `live` (strokes still being drawn, redrawn
+// every frame but only while something is actually in progress).
 export class CanvasRenderer {
-  /**
-   * @param {HTMLElement} container
-   * @param {HTMLCanvasElement} committed
-   * @param {HTMLCanvasElement} live
-   */
   constructor(container, committed, live) {
     this.container = container;
     this.committed = committed;
@@ -108,20 +65,16 @@ export class CanvasRenderer {
     this.widthCss = 0;
     this.heightCss = 0;
 
-    /** @type {Map<string, LiveStroke>} */
     this.liveStrokes = new Map();
     this.rafHandle = null;
-    /** @type {StrokeOp[]} */
     this.lastOps = [];
 
-    /** @type {((fps: number) => void) | null} */
     this.onFrame = null;
     this.lastFrameTime = 0;
 
     this.resize();
   }
 
-  /** @param {HTMLCanvasElement} canvas @returns {CanvasRenderingContext2D} */
   getCtx(canvas) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2D canvas context unavailable");
@@ -139,25 +92,17 @@ export class CanvasRenderer {
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
     }
-    // setTransform (not scale) so repeated resizes never compound.
     this.committedCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.liveCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    // A resized canvas loses its bitmap, so the committed layer must be
-    // rebuilt from the authoritative op log.
-    this.repaintCommitted(this.lastOps);
+    this.repaintCommitted(this.lastOps); // resize clears the canvas bitmap
   }
 
   get size() {
     return { width: this.widthCss, height: this.heightCss };
   }
 
-  /**
-   * Full repaint of the committed layer from the authoritative, seq-ordered
-   * op log — this IS the conflict-resolution mechanism: every client runs
-   * this same deterministic painter's-algorithm pass over the same ops, so
-   * overlapping strokes always composite identically everywhere.
-   * @param {StrokeOp[]} ops
-   */
+  // Same ops, same seq order, on every client — this is the whole conflict
+  // resolution strategy: overlapping strokes composite identically everywhere.
   repaintCommitted(ops) {
     this.lastOps = ops;
     this.committedCtx.clearRect(0, 0, this.widthCss, this.heightCss);
@@ -170,17 +115,11 @@ export class CanvasRenderer {
 
   // ---- Live (in-progress) strokes ----
 
-  /**
-   * @param {string} id
-   * @param {StrokeStyle} style
-   * @param {Point} point
-   */
   beginActiveStroke(id, style, point) {
     this.liveStrokes.set(id, { ...style, points: [point], bakedUpTo: 0, bakeCanvas: null, bakeCtx: null });
     this.ensureLoopRunning();
   }
 
-  /** @param {string} id @param {Point[]} points */
   appendActiveStrokePoints(id, points) {
     const stroke = this.liveStrokes.get(id);
     if (!stroke) return;
@@ -190,7 +129,8 @@ export class CanvasRenderer {
     }
   }
 
-  /** @param {LiveStroke} stroke */
+  // Bakes everything but the last point into an offscreen bitmap so a long
+  // stroke doesn't get redrawn point-by-point every single frame.
   bakeStroke(stroke) {
     if (!stroke.bakeCanvas) {
       stroke.bakeCanvas = document.createElement("canvas");
@@ -207,17 +147,12 @@ export class CanvasRenderer {
     stroke.bakedUpTo = stroke.points.length;
   }
 
-  /**
-   * Removes a stroke from the live layer — used both when it commits (baked
-   * into the committed canvas via repaintCommitted instead) and when it's
-   * aborted (disconnect, or a discarded empty click).
-   * @param {string} id
-   */
+  // called both when a stroke commits (now lives on the committed canvas
+  // instead) and when it's aborted (disconnect, or a discarded empty click)
   removeActiveStroke(id) {
     this.liveStrokes.delete(id);
   }
 
-  /** @returns {number} */
   activeStrokeCount() {
     return this.liveStrokes.size;
   }

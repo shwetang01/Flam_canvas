@@ -1,35 +1,28 @@
-/** @typedef {import('../shared/protocol.js').Point} Point */
-/** @typedef {import('../shared/protocol.js').ServerMessage} ServerMessage */
-/** @typedef {import('../shared/protocol.js').StrokeOp} StrokeOp */
-/** @typedef {import('../shared/protocol.js').ToolName} ToolName */
-/** @typedef {import('../shared/protocol.js').UserInfo} UserInfo */
-
 import { CanvasRenderer } from "./canvas.js";
 import { SocketClient } from "./websocket.js";
 
 const CURSOR_THROTTLE_MS = 50;
 const OUTGOING_POINT_CAP = 300;
 
-/** @param {string} id @returns {HTMLElement} */
 function $(id) {
   const el = document.getElementById(id);
   if (!el) throw new Error(`missing #${id}`);
   return el;
 }
 
-const container = /** @type {HTMLDivElement} */ ($("canvas-container"));
-const committedCanvas = /** @type {HTMLCanvasElement} */ ($("committed-canvas"));
-const liveCanvas = /** @type {HTMLCanvasElement} */ ($("live-canvas"));
-const cursorLayer = /** @type {HTMLDivElement} */ ($("cursor-layer"));
-const presenceList = /** @type {HTMLUListElement} */ ($("presence-list"));
-const statusEl = /** @type {HTMLSpanElement} */ ($("connection-status"));
-const hudEl = /** @type {HTMLDivElement} */ ($("hud"));
-const undoBtn = /** @type {HTMLButtonElement} */ ($("undo-btn"));
-const redoBtn = /** @type {HTMLButtonElement} */ ($("redo-btn"));
-const colorInput = /** @type {HTMLInputElement} */ ($("color-picker"));
-const sizeInput = /** @type {HTMLInputElement} */ ($("size-slider"));
-const roomInput = /** @type {HTMLInputElement} */ ($("room-input"));
-const roomJoinBtn = /** @type {HTMLButtonElement} */ ($("room-join-btn"));
+const container = $("canvas-container");
+const committedCanvas = $("committed-canvas");
+const liveCanvas = $("live-canvas");
+const cursorLayer = $("cursor-layer");
+const presenceList = $("presence-list");
+const statusEl = $("connection-status");
+const hudEl = $("hud");
+const undoBtn = $("undo-btn");
+const redoBtn = $("redo-btn");
+const colorInput = $("color-picker");
+const sizeInput = $("size-slider");
+const roomInput = $("room-input");
+const roomJoinBtn = $("room-join-btn");
 const toolButtons = Array.from(document.querySelectorAll("[data-tool]"));
 
 const renderer = new CanvasRenderer(container, committedCanvas, liveCanvas);
@@ -37,7 +30,6 @@ window.addEventListener("resize", () => renderer.resize());
 
 // ---- Room / connection setup ----
 
-/** @param {string} raw @returns {string} */
 function sanitizeRoomId(raw) {
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
   return cleaned.length > 0 ? cleaned : "main";
@@ -54,26 +46,19 @@ const socket = new SocketClient(`${wsProtocol}//${location.host}?room=${encodeUR
 
 let myUserId = "";
 let myColor = "#000000";
-/** @type {StrokeOp[]} currently-visible ops only, sorted by seq */
-let ops = [];
+let ops = []; // currently-visible ops only, sorted by seq
 let redoAvailable = false; // best-effort UI hint only; server is authoritative
-/** @type {Map<string, UserInfo>} */
 const users = new Map();
-/** @type {Map<string, HTMLDivElement>} */
 const cursorEls = new Map();
 
-/** @type {ToolName} */
 let currentTool = "brush";
 let currentColor = colorInput.value;
 let currentSize = Number(sizeInput.value);
 
-/** @typedef {{ id: string, pending: Point[] }} OwnStroke */
-/** @type {OwnStroke | null} */
-let ownStroke = null;
+let ownStroke = null; // { id, pending: Point[] }
 let outgoingRafHandle = null;
 let lastCursorSentAt = 0;
 
-/** @param {StrokeOp[]} list @param {StrokeOp} op @returns {StrokeOp[]} */
 function insertSorted(list, op) {
   const next = list.filter((o) => o.id !== op.id);
   const idx = next.findIndex((o) => o.seq > op.seq);
@@ -82,7 +67,6 @@ function insertSorted(list, op) {
   return next;
 }
 
-/** @param {PointerEvent} e @returns {Point} */
 function canvasPoint(e) {
   const rect = liveCanvas.getBoundingClientRect();
   return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: Date.now() };
@@ -90,7 +74,6 @@ function canvasPoint(e) {
 
 // ---- Toolbar ----
 
-/** @param {ToolName} tool */
 function setTool(tool) {
   currentTool = tool;
   for (const btn of toolButtons) {
@@ -98,7 +81,7 @@ function setTool(tool) {
   }
 }
 for (const btn of toolButtons) {
-  btn.addEventListener("click", () => setTool(/** @type {ToolName} */ (btn.dataset.tool)));
+  btn.addEventListener("click", () => setTool(btn.dataset.tool));
 }
 setTool(currentTool);
 
@@ -114,7 +97,6 @@ roomJoinBtn.addEventListener("click", () => {
 });
 
 let statusFlashTimer = null;
-/** @param {string} text */
 function flashStatus(text) {
   statusEl.textContent = text;
   if (statusFlashTimer !== null) window.clearTimeout(statusFlashTimer);
@@ -137,7 +119,6 @@ function renderPresence() {
   }
 }
 
-/** @param {UserInfo} user @returns {HTMLDivElement} */
 function getOrCreateCursor(user) {
   let el = cursorEls.get(user.userId);
   if (!el) {
@@ -150,7 +131,6 @@ function getOrCreateCursor(user) {
   return el;
 }
 
-/** @param {string} userId */
 function removeCursor(userId) {
   cursorEls.get(userId)?.remove();
   cursorEls.delete(userId);
@@ -205,7 +185,6 @@ liveCanvas.addEventListener("pointermove", (e) => {
   }
 });
 
-/** @param {PointerEvent} e */
 function endOwnStroke(e) {
   if (!ownStroke) return;
   liveCanvas.releasePointerCapture(e.pointerId);
@@ -214,11 +193,8 @@ function endOwnStroke(e) {
     ownStroke.pending = [];
   }
   socket.send({ type: "stroke:end", strokeId: ownStroke.id });
-  // Deliberately NOT removed from the renderer here — the server echoes
-  // stroke:committed (or stroke:abort) back to the sender too, and that's
-  // the single point where the live layer hands off to the committed layer.
-  // Removing it eagerly here would risk a one-frame flicker if the ack is
-  // still in flight.
+  // not removed from the renderer here — wait for the server's
+  // stroke:committed/abort echo so there's no one-frame flicker
   ownStroke = null;
 }
 liveCanvas.addEventListener("pointerup", endOwnStroke);
@@ -346,10 +322,8 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     socket.send({ type: "undo:request" });
   } else if (e.key === "Escape" && ownStroke) {
-    // Cancels a still-in-progress stroke entirely (never committed, so it
-    // can't interact with the undo/redo stack). Still has to reach the
-    // server: stroke:start/points for it were already broadcast to other
-    // clients, so they need the matching stroke:abort to clear their copy.
+    // cancels a never-committed stroke — still tell the server, since other
+    // clients already got stroke:start/points and need the matching abort
     socket.send({ type: "stroke:cancel", strokeId: ownStroke.id });
     renderer.removeActiveStroke(ownStroke.id);
     ownStroke = null;

@@ -7,9 +7,6 @@ const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 const { RoomManager, sanitizeRoomId } = require("./rooms");
 
-/** @typedef {import('../shared/protocol.js').ClientMessage} ClientMessage */
-/** @typedef {import('../shared/protocol.js').Point} Point */
-
 const PORT = Number(process.env.PORT) || 3000;
 const CLIENT_DIR = path.join(__dirname, "..", "client");
 
@@ -28,11 +25,11 @@ const CONTENT_TYPES = {
 function serveStatic(req, res) {
   const urlPath = (req.url ?? "/").split("?")[0];
   const relPath = urlPath === "/" ? "/index.html" : urlPath;
-  // Prevent path traversal outside the client dir.
   const safeRel = path.normalize(relPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = path.join(CLIENT_DIR, safeRel);
 
   if (!filePath.startsWith(CLIENT_DIR)) {
+    // resolved outside CLIENT_DIR — someone tried a path traversal
     res.writeHead(403, { "Content-Type": "text/plain" });
     res.end("Forbidden");
     return;
@@ -50,32 +47,13 @@ function serveStatic(req, res) {
 const httpServer = http.createServer(serveStatic);
 const wss = new WebSocketServer({ server: httpServer });
 const roomManager = new RoomManager();
-
-/**
- * @typedef {Object} ConnState
- * @property {import('./rooms').Room} room
- * @property {import('./rooms').ClientInfo} client
- * @property {number} messageCount
- * @property {number} windowStart
- * @property {number} jsonFailures
- */
-
-/** @type {Map<import('ws').WebSocket, ConnState>} */
 const connections = new Map();
 
-/** @param {unknown} p @returns {p is Point} */
 function isValidPoint(p) {
   if (typeof p !== "object" || p === null) return false;
-  const o = /** @type {Record<string, unknown>} */ (p);
-  return typeof o.x === "number" && typeof o.y === "number" && typeof o.t === "number";
+  return typeof p.x === "number" && typeof p.y === "number" && typeof p.t === "number";
 }
 
-/**
- * @param {unknown} tool
- * @param {unknown} color
- * @param {unknown} size
- * @returns {boolean}
- */
 function isValidStyle(tool, color, size) {
   return (
     (tool === "brush" || tool === "eraser") &&
@@ -87,30 +65,19 @@ function isValidStyle(tool, color, size) {
   );
 }
 
-/**
- * @param {import('ws').WebSocket} ws
- * @param {string} code
- * @param {string} message
- */
 function sendError(ws, code, message) {
   if (ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify({ type: "error", code, message }));
   }
 }
 
-/**
- * @param {import('ws').WebSocket} ws
- * @param {ConnState} state
- * @param {ClientMessage} msg
- */
 function handleMessage(ws, state, msg) {
   const { room, client } = state;
   client.lastMessageAt = Date.now();
 
   switch (msg.type) {
     case "join":
-      // Already joined at connection time; a second join is ignored.
-      return;
+      return; // already joined at connection time
 
     case "stroke:start": {
       if (typeof msg.strokeId !== "string" || !isValidPoint(msg.point)) return;
@@ -139,7 +106,7 @@ function handleMessage(ws, state, msg) {
 
     case "stroke:points": {
       if (typeof msg.strokeId !== "string" || !Array.isArray(msg.points)) return;
-      if (!client.activeStrokeIds.has(msg.strokeId)) return; // not this client's stroke
+      if (!client.activeStrokeIds.has(msg.strokeId)) return;
       const points = msg.points.slice(0, MAX_POINTS_PER_MESSAGE).filter(isValidPoint);
       if (points.length === 0) return;
       room.drawingState.appendPoints(msg.strokeId, points);
@@ -215,7 +182,6 @@ wss.on("connection", (ws, req) => {
   const userId = crypto.randomUUID();
   const color = room.assignColor();
   const name = `Guest-${userId.slice(0, 4)}`;
-  /** @type {import('./rooms').ClientInfo} */
   const client = {
     ws,
     userId,
@@ -226,7 +192,6 @@ wss.on("connection", (ws, req) => {
   };
   room.addClient(client);
 
-  /** @type {ConnState} */
   const state = { room, client, messageCount: 0, windowStart: Date.now(), jsonFailures: 0 };
   connections.set(ws, state);
 
@@ -246,7 +211,7 @@ wss.on("connection", (ws, req) => {
       state.messageCount = 0;
     }
     state.messageCount++;
-    if (state.messageCount > MAX_MESSAGES_PER_SECOND) return; // silently drop excess
+    if (state.messageCount > MAX_MESSAGES_PER_SECOND) return; // over the cap — drop, don't disconnect
 
     let parsed;
     try {
@@ -273,6 +238,8 @@ wss.on("connection", (ws, req) => {
     connections.delete(ws);
     const info = room.removeClient(ws);
     if (info) {
+      // finish or drop whatever this client was mid-stroke on, so other
+      // clients don't keep a ghost of an unfinished stroke on their live layer
       for (const strokeId of info.activeStrokeIds) {
         const op = room.drawingState.finalizeOrDiscard(strokeId);
         if (op) {
@@ -286,13 +253,11 @@ wss.on("connection", (ws, req) => {
     roomManager.onClientLeft(room);
   });
 
-  ws.on("error", () => {
-    // 'close' fires next regardless; nothing extra to do here.
-  });
+  ws.on("error", () => {}); // 'close' fires right after and does the cleanup
 });
 
-// Sweep for connections that have gone silent (client-initiated ping every
-// ~15s means a healthy connection never goes this long without a message).
+// A healthy connection pings every ~15s, so anything quieter than this for a
+// while is dead and just hasn't told us yet.
 setInterval(() => {
   const now = Date.now();
   for (const [ws, state] of connections) {
@@ -306,9 +271,6 @@ httpServer.listen(PORT, () => {
   console.log(`Collaborative canvas server listening on http://localhost:${PORT}`);
 });
 
-// A live demo shouldn't go dark over one bad message handler; log and keep
-// serving the rooms that are fine. A real production deployment would still
-// want a process manager (pm2/systemd) to restart on genuine crashes.
 process.on("uncaughtException", (err) => {
   console.error("Uncaught exception:", err);
 });

@@ -1,34 +1,19 @@
-/** @typedef {import('../shared/protocol.js').ClientMessage} ClientMessage */
-/** @typedef {import('../shared/protocol.js').ServerMessage} ServerMessage */
-
 const PING_INTERVAL_MS = 15_000;
 const MAX_BACKOFF_MS = 10_000;
 
-/**
- * Thin wrapper around the native browser WebSocket — deliberately not the
- * socket.io client, to keep the client dependency-free in the same spirit as
- * "no drawing libraries," even though the server may use socket.io. Handles
- * JSON encode/decode, reconnect with exponential backoff, and a
- * client-initiated ping that doubles as latency measurement and as proof of
- * liveness for the server's stale-connection sweep.
- */
+// Thin wrapper around the native WebSocket: JSON in/out, reconnect with
+// backoff, and a client-initiated ping used for both latency and liveness.
 export class SocketClient {
-  /** @param {string} url */
   constructor(url) {
     this.url = url;
-    /** @type {WebSocket | null} */
     this.ws = null;
     this.reconnectAttempt = 0;
     this.pingTimer = null;
     this.deliberatelyClosed = false;
 
-    /** @type {((msg: ServerMessage) => void) | null} */
     this.onMessage = null;
-    /** @type {(() => void) | null} */
     this.onOpen = null;
-    /** @type {(() => void) | null} */
     this.onClose = null;
-    /** @type {((ms: number) => void) | null} */
     this.onLatency = null;
   }
 
@@ -63,9 +48,8 @@ export class SocketClient {
       if (!this.deliberatelyClosed) this.scheduleReconnect();
     });
 
-    ws.addEventListener("error", () => {
-      // 'close' always follows; nothing extra to do here.
-    });
+    // 'close' always fires right after 'error', so cleanup lives there.
+    ws.addEventListener("error", () => {});
   }
 
   scheduleReconnect() {
@@ -87,7 +71,6 @@ export class SocketClient {
     }
   }
 
-  /** @param {ClientMessage} msg */
   send(msg) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
