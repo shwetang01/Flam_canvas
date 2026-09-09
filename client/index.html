@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Collaborative Canvas</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="toolbar">
+      <div class="toolbar-group">
+        <button data-tool="brush" class="tool-btn" title="Brush">🖌️ Brush</button>
+        <button data-tool="eraser" class="tool-btn" title="Eraser">🧽 Eraser</button>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="control-label">
+          Color
+          <input type="color" id="color-picker" value="#1e293b" />
+        </label>
+        <label class="control-label">
+          Size
+          <input type="range" id="size-slider" min="1" max="60" value="6" />
+        </label>
+      </div>
+
+      <div class="toolbar-group">
+        <button id="undo-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button id="redo-btn" title="Redo (Ctrl+Shift+Z)" disabled>↷ Redo</button>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="control-label">
+          Room
+          <input type="text" id="room-input" maxlength="64" />
+        </label>
+        <button id="room-join-btn">Join</button>
+      </div>
+
+      <div class="toolbar-group status-group">
+        <span id="connection-status">Connecting…</span>
+      </div>
+    </header>
+
+    <div id="body">
+      <main id="canvas-container">
+        <canvas id="committed-canvas"></canvas>
+        <canvas id="live-canvas"></canvas>
+        <div id="cursor-layer"></div>
+      </main>
+
+      <aside id="presence-panel">
+        <h2>Online</h2>
+        <ul id="presence-list"></ul>
+      </aside>
+    </div>
+
+    <div id="hud"></div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
