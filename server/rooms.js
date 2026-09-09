@@ -122,6 +122,21 @@ function sanitizeRoomId(raw) {
   return cleaned.length > 0 ? cleaned : "main";
 }
 
+// Display name is user-chosen free text -- trim it, cap the length, and
+// drop control characters. The client renders it via textContent (never
+// innerHTML), so this is hygiene, not the XSS defense; null means "no
+// name given, caller should fall back."
+function sanitizeName(raw) {
+  const input = raw == null ? "" : String(raw);
+  let cleaned = "";
+  for (const ch of input) {
+    const code = ch.codePointAt(0);
+    if (code >= 32 && code !== 127) cleaned += ch;
+  }
+  cleaned = cleaned.trim().slice(0, 24);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
 class RoomManager {
   constructor() {
     this.rooms = new Map();
@@ -143,4 +158,4 @@ class RoomManager {
   }
 }
 
-module.exports = { Room, RoomManager, sanitizeRoomId };
+module.exports = { Room, RoomManager, sanitizeRoomId, sanitizeName };

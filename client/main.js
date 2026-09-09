@@ -21,6 +21,7 @@ const undoBtn = $("undo-btn");
 const redoBtn = $("redo-btn");
 const colorInput = $("color-picker");
 const sizeInput = $("size-slider");
+const nameInput = $("name-input");
 const roomInput = $("room-input");
 const roomJoinBtn = $("room-join-btn");
 const toolButtons = Array.from(document.querySelectorAll("[data-tool]"));
@@ -28,19 +29,43 @@ const toolButtons = Array.from(document.querySelectorAll("[data-tool]"));
 const renderer = new CanvasRenderer(container, committedCanvas, liveCanvas);
 window.addEventListener("resize", () => renderer.resize());
 
-// ---- Room / connection setup ----
+// ---- Room / name / connection setup ----
 
 function sanitizeRoomId(raw) {
   const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
   return cleaned.length > 0 ? cleaned : "main";
 }
 
+const NAME_STORAGE_KEY = "collab-canvas-name";
+
+function loadSavedName() {
+  try {
+    return localStorage.getItem(NAME_STORAGE_KEY) ?? "";
+  } catch {
+    return ""; // private browsing / storage disabled — just fall back to a random name
+  }
+}
+
+function saveName(name) {
+  try {
+    localStorage.setItem(NAME_STORAGE_KEY, name);
+  } catch {
+    // nothing to do if storage isn't available — the field just won't persist
+  }
+}
+
 const params = new URLSearchParams(location.search);
 const roomId = sanitizeRoomId(params.get("room") ?? "main");
 roomInput.value = roomId;
 
+const myName = (params.get("name") ?? loadSavedName()).trim().slice(0, 24);
+nameInput.value = myName;
+if (myName) saveName(myName); // e.g. a shared link with ?name= — remember it for next time too
+
 const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
-const socket = new SocketClient(`${wsProtocol}//${location.host}?room=${encodeURIComponent(roomId)}`);
+let wsUrl = `${wsProtocol}//${location.host}?room=${encodeURIComponent(roomId)}`;
+if (myName) wsUrl += `&name=${encodeURIComponent(myName)}`;
+const socket = new SocketClient(wsUrl);
 
 // ---- App state ----
 
@@ -92,8 +117,12 @@ undoBtn.addEventListener("click", () => socket.send({ type: "undo:request" }));
 redoBtn.addEventListener("click", () => socket.send({ type: "redo:request" }));
 
 roomJoinBtn.addEventListener("click", () => {
-  const target = sanitizeRoomId(roomInput.value);
-  location.search = `?room=${encodeURIComponent(target)}`;
+  const targetRoom = sanitizeRoomId(roomInput.value);
+  const targetName = nameInput.value.trim().slice(0, 24);
+  saveName(targetName);
+  const query = new URLSearchParams({ room: targetRoom });
+  if (targetName) query.set("name", targetName);
+  location.search = `?${query.toString()}`;
 });
 
 let statusFlashTimer = null;
@@ -107,14 +136,18 @@ function flashStatus(text) {
 
 // ---- Presence ----
 
+// Names are user-chosen text, so they're set via textContent below, never
+// innerHTML — a name like "<img onerror=...>" must render as inert text.
 function renderPresence() {
   presenceList.innerHTML = "";
   for (const user of users.values()) {
     const li = document.createElement("li");
     li.className = "presence-chip";
-    li.innerHTML = `<span class="dot" style="background:${user.color}"></span>${user.name}${
-      user.userId === myUserId ? " (you)" : ""
-    }`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = user.color;
+    li.appendChild(dot);
+    li.appendChild(document.createTextNode(user.name + (user.userId === myUserId ? " (you)" : "")));
     presenceList.appendChild(li);
   }
 }
@@ -124,7 +157,14 @@ function getOrCreateCursor(user) {
   if (!el) {
     el = document.createElement("div");
     el.className = "remote-cursor";
-    el.innerHTML = `<span class="cursor-dot" style="background:${user.color}"></span><span class="cursor-label">${user.name}</span>`;
+    const dot = document.createElement("span");
+    dot.className = "cursor-dot";
+    dot.style.background = user.color;
+    const label = document.createElement("span");
+    label.className = "cursor-label";
+    label.textContent = user.name;
+    el.appendChild(dot);
+    el.appendChild(label);
     cursorLayer.appendChild(el);
     cursorEls.set(user.userId, el);
   }

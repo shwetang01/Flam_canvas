@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
-const { RoomManager, sanitizeRoomId } = require("./rooms");
+const { RoomManager, sanitizeRoomId, sanitizeName } = require("./rooms");
 
 const PORT = Number(process.env.PORT) || 3000;
 const CLIENT_DIR = path.join(__dirname, "..", "client");
@@ -181,7 +181,7 @@ wss.on("connection", (ws, req) => {
 
   const userId = crypto.randomUUID();
   const color = room.assignColor();
-  const name = `Guest-${userId.slice(0, 4)}`;
+  const name = sanitizeName(url.searchParams.get("name")) ?? `Guest-${userId.slice(0, 4)}`;
   const client = {
     ws,
     userId,
