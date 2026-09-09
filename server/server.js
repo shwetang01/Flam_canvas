@@ -76,9 +76,6 @@ function handleMessage(ws, state, msg) {
   client.lastMessageAt = Date.now();
 
   switch (msg.type) {
-    case "join":
-      return; // already joined at connection time
-
     case "stroke:start": {
       if (typeof msg.strokeId !== "string" || !isValidPoint(msg.point)) return;
       if (!isValidStyle(msg.tool, msg.color, msg.size)) return;

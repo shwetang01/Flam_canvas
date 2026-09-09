@@ -38,6 +38,13 @@ the server, and every client is a read-through of it.
 
 ## WebSocket protocol
 
+Room and identity are established before any message ever flows: the client
+connects to `ws://host?room=<id>&name=<optional>`, the server sanitizes both
+(`room` -> `[a-zA-Z0-9_-]`, `name` -> trimmed/length-capped/control-chars
+stripped) and immediately assigns a `userId` + color, replying with
+`state:sync`. There's no separate `join` handshake message — the query
+string *is* the join.
+
 Full message set (see [`shared/protocol.js`](./shared/protocol.js) for the
 canonical JSDoc shapes — it's imported by nothing at runtime, it exists so
 both sides document the same contract in one place):
@@ -187,6 +194,31 @@ final layering is decided exclusively at commit time via `seq`.
   rectangle) is one new registry entry using `ctx.strokeRect(...)` on the
   stroke's first/last points — no renderer changes required. This is a
   deliberate extension point, not incidental structure.
+- **Eraser preview can't use `destination-out` on the live canvas.** The
+  live layer sits *on top of* the committed layer as a separate `<canvas>`
+  element — making a spot transparent there just reveals the still-unerased
+  committed canvas underneath, since two stacked canvases don't share a
+  compositing pass. First attempt (copy the committed bitmap onto the live
+  canvas each frame, then erase the copy) still failed for the same reason:
+  the copy is opaque, but punching a transparent hole in it still only
+  reveals the real committed canvas below, unchanged. The actual fix:
+  preview the erase by painting **opaque white** (matching
+  `#canvas-container`'s real background) on the live layer instead. The
+  authoritative erase — true `destination-out` — still only ever runs
+  against the real committed canvas, and only at commit time via
+  `repaintCommitted`. Caveat: this assumes a flat, known canvas background;
+  it would need revisiting if the background ever became non-solid.
+
+## Display name
+
+Users can set their own name (toolbar field, or `?name=` in the URL) instead
+of the random `Guest-XXXX` the server assigns by default; resolved the same
+way `room` already is (URL param first, then a value saved in
+`localStorage`), sanitized server-side (trimmed, length-capped, control
+characters stripped). Since the name is arbitrary user text rather than
+server-generated, the presence list and remote cursor labels build their DOM
+via `textContent`/element construction rather than `innerHTML` — a name
+like `<img onerror=...>` must render as inert text, not execute.
 
 ## Scaling to ~1000 concurrent users
 
