@@ -2,7 +2,7 @@
 
 ## Stack, and why
 
-Plain JavaScript (no TypeScript, no build step) on both sides, HTML5 Canvas
+Plain JavaScript  on both sides, HTML5 Canvas
 on the client, native WebSockets (the `ws` package) on the server — no
 Socket.io, no drawing library, no frontend framework, per the assignment's
 constraints. Skipping a build step means the client's `.js` files load as
