@@ -113,6 +113,6 @@ collaborative-canvas/
 
 ## Time spent
 
-Roughly one focused day: architecture/protocol design, server-side drawing
+Roughly two focused days: architecture/protocol design, server-side drawing
 state + undo/redo logic, client canvas renderer + tool registry, WebSocket
 wiring, multi-user testing, and documentation.
