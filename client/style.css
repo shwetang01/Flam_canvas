@@ -102,6 +102,7 @@ html, body {
 #body {
   flex: 1;
   display: flex;
+  position: relative;
   min-height: 0;
 }
 
@@ -165,6 +166,7 @@ html, body {
   border-left: 1px solid #334155;
   padding: 12px;
   overflow-y: auto;
+  transition: transform 0.2s ease-in-out;
 }
 
 #presence-panel h2 {
@@ -173,6 +175,19 @@ html, body {
   letter-spacing: 0.05em;
   color: #94a3b8;
   margin: 0 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#presence-panel .close-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
 }
 
 #presence-list {
@@ -210,9 +225,38 @@ html, body {
   pointer-events: none;
 }
 
+.mobile-only {
+  display: none;
+}
+
 @media (max-width: 700px) {
+  .mobile-only {
+    display: inline-block;
+  }
+  #users-toggle-btn {
+    background: transparent;
+    border: 1px solid #475569;
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-right: 8px;
+  }
   #presence-panel {
-    display: none;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.5);
+    transform: translateX(100%);
+  }
+  #presence-panel.mobile-open {
+    transform: translateX(0);
+  }
+  #presence-panel .close-btn {
+    display: block;
   }
   #toolbar {
     gap: 10px;

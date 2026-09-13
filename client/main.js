@@ -25,9 +25,20 @@ const nameInput = $("name-input");
 const roomInput = $("room-input");
 const roomJoinBtn = $("room-join-btn");
 const toolButtons = Array.from(document.querySelectorAll("[data-tool]"));
+const usersToggleBtn = $("users-toggle-btn");
+const presenceCloseBtn = $("presence-close-btn");
+const presencePanel = $("presence-panel");
 
 const renderer = new CanvasRenderer(container, committedCanvas, liveCanvas);
 window.addEventListener("resize", () => renderer.resize());
+
+// ---- Mobile Panel Toggle ----
+usersToggleBtn.addEventListener("click", () => {
+  presencePanel.classList.add("mobile-open");
+});
+presenceCloseBtn.addEventListener("click", () => {
+  presencePanel.classList.remove("mobile-open");
+});
 
 // ---- Room / name / connection setup ----
 

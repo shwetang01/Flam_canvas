@@ -43,6 +43,7 @@
       </div>
 
       <div class="toolbar-group status-group">
+        <button id="users-toggle-btn" class="mobile-only" title="Show Users">👥 Users</button>
         <span id="connection-status">Connecting…</span>
       </div>
     </header>
@@ -55,7 +56,10 @@
       </main>
 
       <aside id="presence-panel">
-        <h2>Online</h2>
+        <h2>
+          Online
+          <button id="presence-close-btn" class="close-btn" title="Close">×</button>
+        </h2>
         <ul id="presence-list"></ul>
       </aside>
     </div>
