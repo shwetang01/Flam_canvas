@@ -61,6 +61,27 @@ user in the room, not per-user (see ARCHITECTURE.md for why).
 **Keyboard shortcuts**: `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` redo, `Escape`
 cancels the stroke you're currently mid-draw on.
 
+## Project Structure
+
+```text
+collaborative-canvas/
+├── client/
+│   ├── index.html
+│   ├── style.css
+│   ├── canvas.js        # Canvas drawing and rendering layers
+│   ├── websocket.js     # WebSocket client with reconnection logic
+│   └── main.js          # App initialization, toolbar, and pointer events
+├── server/
+│   ├── server.js        # HTTP and WebSocket server setup
+│   ├── rooms.js         # Room lifecycle and file persistence
+│   └── drawing-state.js # Global undo/redo and op-log authoritative state
+├── shared/
+│   └── protocol.js      # JSDoc definitions for WebSocket message shapes
+├── package.json
+├── README.md
+└── ARCHITECTURE.md      # Detailed system design and rationale
+```
+
 ## Features
 
 - Brush + eraser tools, adjustable color and stroke size
