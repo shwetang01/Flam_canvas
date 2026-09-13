@@ -4,6 +4,11 @@ A real-time, multi-user drawing canvas. Multiple people draw on the same
 canvas at once, see each other's strokes as they're drawn (not after), see
 each other's cursors, and share a single **global** undo/redo history.
 
+## Live Demo
+
+- **Live URL**: [https://collaborative-canvas-hen7.onrender.com](https://collaborative-canvas-hen7.onrender.com)
+- **GitHub Repository**: [https://github.com/shwetang01/Flam_canvas](https://github.com/shwetang01/Flam_canvas)
+
 Built with vanilla JavaScript + the HTML5 Canvas API on the client (no
 frameworks, no drawing libraries) and Node.js + native WebSockets on the
 server. No build step — the client runs as native ES modules directly in the
